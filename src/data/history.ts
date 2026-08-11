@@ -1,0 +1,53 @@
+import type { TripReceipt } from '@/types';
+
+/** Seed ride history so the History screen has something to show on day one. */
+export const SEED_RECEIPTS: TripReceipt[] = [
+  {
+    id: 't-001',
+    date: '2026-08-08T07:42:00.000Z',
+    pickup: 'Plaza Rizal',
+    destination: 'SM City Naga',
+    vehicleType: 'tricycle',
+    driverName: 'Mang Tony',
+    plate: 'NAG-1024',
+    fare: 20,
+    tip: 10,
+    rating: 5,
+  },
+  {
+    id: 't-002',
+    date: '2026-08-07T17:15:00.000Z',
+    pickup: 'SM City Naga',
+    destination: 'Ateneo de Naga',
+    vehicleType: 'tricycle',
+    driverName: 'Ate Liza',
+    plate: 'NGA-8551',
+    fare: 25,
+    tip: 0,
+    rating: 4,
+  },
+  {
+    id: 't-003',
+    date: '2026-08-05T11:03:00.000Z',
+    pickup: 'Basilica Minore',
+    destination: 'Naga City Hall',
+    vehicleType: 'jeepney',
+    driverName: 'Manong Berto',
+    plate: 'NGA-4412',
+    fare: 13,
+    tip: 0,
+    rating: 5,
+  },
+  {
+    id: 't-004',
+    date: '2026-08-02T19:26:00.000Z',
+    pickup: 'Robinsons Place Naga',
+    destination: 'Plaza Rizal',
+    vehicleType: 'tricycle',
+    driverName: 'Kuya Romy',
+    plate: 'NAG-3718',
+    fare: 30,
+    tip: 20,
+    rating: 4,
+  },
+];

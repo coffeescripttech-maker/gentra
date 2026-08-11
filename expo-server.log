@@ -1,0 +1,14 @@
+﻿env: load .env
+env: export EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+Starting project at C:\Users\ACER\Desktop\2026 CAPSTONE\MacroMorphosis_Style\macromorphosis\gentra_mobile_app
+› Port 8081 is being used by another process
+npx : Input is required, but 'npx expo' is in non-interactive mode.
+At line:1 char:436
++ ... ; $env:EXPO_NO_TELEMETRY='1'; npx expo start --port 8081 2>&1 | Tee-O ...
++                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Input is requir...teractive mode.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Required input:
+> Use port 8082 instead?
+› Skipping dev server
