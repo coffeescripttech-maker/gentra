@@ -20,6 +20,8 @@ interface VehicleTypeCardProps {
   type: VehicleType;
   selected: boolean;
   onPress: () => void;
+  /** Pre-formatted fare, shown as a price badge so it's visible before booking. */
+  priceFmt?: string;
 }
 
 const META: Record<VehicleType, { title: string; hint: string }> = {
@@ -28,7 +30,7 @@ const META: Record<VehicleType, { title: string; hint: string }> = {
 };
 
 /** Selectable ride card — border/bg/check spring in and out with selection. */
-export function VehicleTypeCard({ type, selected, onPress }: VehicleTypeCardProps) {
+export function VehicleTypeCard({ type, selected, onPress, priceFmt }: VehicleTypeCardProps) {
   const meta = META[type];
   const progress = useSharedValue(selected ? 1 : 0);
 
@@ -61,9 +63,16 @@ export function VehicleTypeCard({ type, selected, onPress }: VehicleTypeCardProp
           <Text style={[styles.title, selected && styles.titleSelected]}>{meta.title}</Text>
           <Text style={styles.hint}>{meta.hint}</Text>
         </View>
-        <Animated.View style={checkStyle}>
-          <Icon name="check-circle" size={24} color={Colors.brand} />
-        </Animated.View>
+        <View style={styles.right}>
+          <Animated.View style={checkStyle}>
+            <Icon name="check-circle" size={24} color={Colors.brand} />
+          </Animated.View>
+          {priceFmt && (
+            <Text style={[styles.price, selected && styles.priceSelected]}>
+              {priceFmt}
+            </Text>
+          )}
+        </View>
       </Animated.View>
     </PressableScale>
   );
@@ -93,6 +102,18 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
     gap: 2,
+  },
+  right: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  price: {
+    fontFamily: FontFamily.button,
+    fontSize: FontSize.body,
+    color: Colors.secondaryText,
+  },
+  priceSelected: {
+    color: Colors.brand,
   },
   title: {
     fontFamily: FontFamily.heading,

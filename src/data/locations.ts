@@ -1,11 +1,96 @@
 import type { Landmark, LatLng } from '@/types';
 import { haversineKm } from '@/utils/geo';
 
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+/** Search window around downtown Naga so autocomplete stays local. */
+const NAGA_BBOX = '123.05,13.52,123.30,13.73';
+
 type PlaceParams = Record<string, string | string[] | undefined>;
 
 /** Keep a generated custom-place id stable across renders. */
 export function customPlaceId(p: LatLng): string {
   return `custom:${p.latitude.toFixed(5)},${p.longitude.toFixed(5)}`;
+}
+
+/**
+ * Autocomplete: known Naga landmarks always rank first (they're offline-safe),
+ * then Mapbox geocoding fills in streets/POIs within the Naga bbox. Falls back
+ * to local matches only when the API is unreachable or there's no token.
+ */
+export async function searchPlaces(query: string, proximity?: LatLng): Promise<Landmark[]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+
+  const local = LANDMARKS.filter(
+    (l) => l.name.toLowerCase().includes(q) || l.address.toLowerCase().includes(q),
+  );
+
+  if (!MAPBOX_TOKEN) return local;
+
+  try {
+    const prox = proximity
+      ? `&proximity=${proximity.longitude},${proximity.latitude}`
+      : '';
+    const res = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8&country=ph&bbox=${NAGA_BBOX}${prox}`,
+    );
+    if (!res.ok) throw new Error('search failed');
+    const json: {
+      features?: Array<{ id: string; text?: string; place_name?: string; center: [number, number] }>;
+    } = await res.json();
+
+    const parts = (name: string) => name.split(', ').filter(Boolean);
+    const remote: Landmark[] = (json.features ?? []).map((f) => {
+      const text = parts(f.place_name ?? '');
+      return {
+        id: `mapbox:${f.id}`,
+        name: f.text ?? text[0] ?? 'Selected place',
+        address: text.slice(1).join(', ') || 'Naga City',
+        latLng: { latitude: f.center[1], longitude: f.center[0] },
+      };
+    });
+
+    // Keep local first, drop remote duplicates of a known landmark.
+    const localNames = new Set(local.map((l) => l.name.toLowerCase()));
+    const merged = [...local, ...remote.filter((r) => !localNames.has(r.name.toLowerCase()))];
+    return merged.slice(0, 8);
+  } catch {
+    return local;
+  }
+}
+
+/** Reverse-geocode a coordinate into a Landmark; snaps to the nearest known
+ * place when the API is unreachable so confirm always has an address. */
+export async function reverseGeocodePlace(coord: LatLng): Promise<Landmark> {
+  if (MAPBOX_TOKEN) {
+    try {
+      const res = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${coord.longitude},${coord.latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=en`,
+      );
+      if (res.ok) {
+        const json: { features?: Array<{ place_name?: string }> } = await res.json();
+        const feature = json.features?.[0];
+        if (feature?.place_name) {
+          const parts = feature.place_name.split(', ').filter(Boolean);
+          return {
+            id: customPlaceId(coord),
+            name: parts[0] ?? 'Selected location',
+            address: parts.slice(1).join(', ') || 'Naga City',
+            latLng: coord,
+          };
+        }
+      }
+    } catch {
+      // fall through to the offline snap
+    }
+  }
+  const near = nearestLandmark(coord);
+  return {
+    id: customPlaceId(coord),
+    name: `Near ${near.name}`,
+    address: near.address,
+    latLng: coord,
+  };
 }
 
 /**

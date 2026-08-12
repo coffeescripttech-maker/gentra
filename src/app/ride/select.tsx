@@ -17,7 +17,7 @@ import { FontFamily, FontSize, LetterSpacing } from '@/constants/typography';
 import { useRide } from '@/context/ride';
 import { placeFromParams } from '@/data';
 import type { RideMode, VehicleType } from '@/types';
-import { estimateFare } from '@/utils/fare';
+import { estimateFare, formatPeso } from '@/utils/fare';
 import { tripDistanceKm } from '@/utils/geo';
 
 const MODES: Array<{ key: RideMode; label: string; hint: string }> = [
@@ -45,7 +45,15 @@ export default function RideSelectScreen() {
     if (type === 'jeepney') setRideMode('shared');
   };
 
-  const fare = estimateFare(vehicleType, rideMode, distance);
+  // Show both prices up front (Grab-style) — each card quotes its own route.
+  const tricycleFare = estimateFare(
+    'tricycle',
+    vehicleType === 'tricycle' ? rideMode : 'special',
+    distance,
+  );
+  const jeepneyFare = estimateFare('jeepney', 'shared', distance);
+  const fare = vehicleType === 'tricycle' ? tricycleFare : jeepneyFare;
+  const vehicleLabel = vehicleType === 'tricycle' ? 'Tricycle' : 'Jeepney';
 
   const confirm = () => {
     startBooking(pickup, destination, vehicleType, rideMode);
@@ -98,11 +106,13 @@ export default function RideSelectScreen() {
                 type="tricycle"
                 selected={vehicleType === 'tricycle'}
                 onPress={() => selectVehicle('tricycle')}
+                priceFmt={formatPeso(tricycleFare.total)}
               />
               <VehicleTypeCard
                 type="jeepney"
                 selected={vehicleType === 'jeepney'}
                 onPress={() => selectVehicle('jeepney')}
+                priceFmt={formatPeso(jeepneyFare.total)}
               />
             </View>
           </View>
@@ -126,7 +136,7 @@ export default function RideSelectScreen() {
       {/* Sticky CTA */}
       <View style={styles.footer}>
         <PrimaryButton
-          label={`Book ${vehicleType === 'tricycle' ? 'Tricycle' : 'Jeepney'}`}
+          label={`Book ${vehicleLabel} · ${formatPeso(fare.total)}`}
           icon={vehicleType === 'tricycle' ? 'motorbike' : 'bus'}
           gradient
           onPress={confirm}

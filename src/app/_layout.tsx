@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'react-native';
 import { useEffect } from 'react';
+import { StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/colors';
@@ -29,11 +29,16 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SessionProvider>
         <RideProvider>
-          <StatusBar barStyle="dark-content" hidden={false} translucent={false} backgroundColor={Colors.background} />
+          <StatusBar
+            barStyle="dark-content"
+            hidden={false}
+            translucent={false}
+            backgroundColor={Colors.background}
+          />
           <Stack
             screenOptions={{
               headerShown: false,
-              contentStyle: { backgroundColor: Colors.background },
+              contentStyle: { backgroundColor: Colors.background }
             }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="role" />

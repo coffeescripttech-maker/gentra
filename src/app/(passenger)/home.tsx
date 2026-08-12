@@ -2,7 +2,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import {
-  FlatList,
   Image,
   ScrollView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 
 import { AnimatedNumber } from '@/components/ui/animated-number';
 import { CustomIcon, type CustomIconKind } from '@/components/ui/custom-icon';
@@ -28,9 +28,8 @@ import {
   LetterSpacing,
   LineHeight
 } from '@/constants/typography';
-import { useRide } from '@/context/ride';
 import { useSession } from '@/context/session';
-import { getLandmark, LANDMARKS, placeToParams } from '@/data';
+import { useRebook } from '@/hooks/use-rebook';
 import type { RideMode } from '@/types';
 import { formatPeso } from '@/utils/fare';
 
@@ -148,73 +147,35 @@ const PROMOS: Array<{
   }
 ];
 
-type PickerMode = 'pickup' | 'destination';
+/** Height of the curved carve-out under the hero gradient. */
+const HERO_WAVE_H = 50;
+
+const HERO_WAVE_PATH =
+  'M0,30 C60,20 120,21 180,29 C240,37 315,39 375,34 C375,36 375,38 375,40 L0,40 Z';
 
 export default function PassengerHomeScreen() {
   const router = useRouter();
   const { state } = useSession();
-  const { draftPickup, draftDestination, setDraftPickup, setDraftDestination } = useRide();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  const [pickupId, setPickupId] = useState('plaza-rizal');
-  const [destinationId, setDestinationId] = useState('sm-naga');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerMode, setPickerMode] = useState<PickerMode>('destination');
-  const [presetMode, setPresetMode] = useState<RideMode | undefined>(undefined);
+  const rebook = useRebook();
+  const lastTrip = state.receipts[0];
+
   const [promosOpen, setPromosOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  // A map-chosen place (ride draft) wins over the list's default landmark.
-  const pickup = draftPickup ?? getLandmark(pickupId);
-  const destination = draftDestination ?? getLandmark(destinationId);
   const tileSize = (width - spacing.xxl * 2 - spacing.sm * 3) / 4;
 
-  const openPicker = (mode: PickerMode, rideMode?: RideMode) => {
-    setPickerMode(mode);
-    setPresetMode(rideMode);
-    setPickerOpen(true);
-  };
-
-  // The full-screen map takes over; closing the sheet underneath keeps home
-  // tidy. The flow is continuous on the map page — pickup → destination →
-  // route — and never returns here mid-booking.
-  const openMapPicker = () => {
-    setPickerOpen(false);
-    router.push({
-      pathname: '/map-picker',
-      params: { pickupId: pickup.id, destinationId: destination.id }
-    });
-  };
-
-  const pickLandmark = (id: string) => {
-    if (pickerMode === 'pickup') {
-      // An explicit list pick replaces any map-chosen pickup.
-      setDraftPickup(null);
-      setPickupId(id);
-      setPickerMode('destination');
-      return;
-    }
-    setDraftDestination(null);
-    setDestinationId(id);
-    setPickerOpen(false);
-    const mode = presetMode;
-    setPresetMode(undefined);
-    router.push({
-      pathname: '/ride/select',
-      params: {
-        ...placeToParams('pickup', pickup),
-        ...placeToParams('destination', getLandmark(id)),
-        ...(mode ? { mode } : {})
-      }
-    });
-  };
+  // The whole trip-building flow lives on the Where To? screen now.
+  const openWhereTo = (mode?: RideMode) =>
+    router.push({ pathname: '/where-to', params: mode ? { mode } : {} });
 
   const runAction = (action: TileAction) => {
     switch (action.kind) {
       case 'book':
-        openPicker('destination', action.mode);
+        openWhereTo(action.mode);
         break;
       case 'tab':
         router.push(action.path);
@@ -239,9 +200,20 @@ export default function PassengerHomeScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          {/* Organic carve-out at the bottom — the green hero flows straight into the
+            white content area beneath (pure fill, no border or stroke) */}
+          <Svg
+            pointerEvents="none"
+            width={width}
+            height={HERO_WAVE_H}
+            viewBox="0 0 375 40"
+            preserveAspectRatio="none"
+            style={styles.headerWave}>
+            <Path d={HERO_WAVE_PATH} fill={Colors.card} />
+          </Svg>
           <View style={styles.headerTop}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.kicker}>STROLL</Text>
+              <Text style={styles.kicker}>DALI-DALI</Text>
               <Text style={styles.greeting}>
                 Hello, {state.passenger.name.split(' ')[0]}! 👋
               </Text>
@@ -293,7 +265,7 @@ export default function PassengerHomeScreen() {
           <PressableScale
             accessibilityRole="button"
             style={styles.whereTo}
-            onPress={() => openPicker('destination')}
+            onPress={() => openWhereTo()}
             haptic>
             <View style={styles.whereToIcon}>
               <Icon name="magnify" size={18} color={Colors.brand} />
@@ -301,6 +273,32 @@ export default function PassengerHomeScreen() {
             <Text style={styles.whereToText}>Where are you going?</Text>
             <Icon name="chevron-right" size={20} color={Colors.secondaryText} />
           </PressableScale>
+
+          {/* Rebook the most recent ride with one tap */}
+          {lastTrip && (
+            <PressableScale
+              accessibilityRole="button"
+              style={styles.rebookRow}
+              onPress={() => void rebook(lastTrip)}
+              haptic>
+              <View style={styles.rebookRowIcon}>
+                <Icon name="refresh" size={15} color={Colors.brand} />
+              </View>
+              <View style={styles.rebookRowWrap}>
+                <Text style={styles.rebookRowLabel} numberOfLines={1}>
+                  Rebook last trip
+                </Text>
+                <Text style={styles.rebookRowRoute} numberOfLines={1}>
+                  {lastTrip.pickup} → {lastTrip.destination}
+                </Text>
+              </View>
+              <Icon
+                name="chevron-right"
+                size={16}
+                color={Colors.secondaryText}
+              />
+            </PressableScale>
+          )}
         </LinearGradient>
 
         {/* ── Body ─────────────────────────────────────────────── */}
@@ -389,113 +387,6 @@ export default function PassengerHomeScreen() {
         </View>
       </ScrollView>
 
-      {/* ── Pickup / destination picker ────────────────────────── */}
-      <Sheet visible={pickerOpen} onClose={() => setPickerOpen(false)}>
-        <View style={styles.sheetContent}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.sheetTitle, styles.sheetTitleNoMargin]}>
-              {pickerMode === 'pickup' ? 'Choose pickup' : 'Where to?'}
-            </Text>
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="Pick from the map"
-              style={styles.mapButton}
-              onPress={openMapPicker}
-              haptic>
-              <Icon name="map-marker-path" size={16} color={Colors.brand} />
-              <Text style={styles.mapButtonText}>Map</Text>
-            </PressableScale>
-          </View>
-
-          {pickerMode === 'destination' ? (
-            <PressableScale
-              style={styles.pickupRow}
-              onPress={() => setPickerMode('pickup')}
-              haptic>
-              <View
-                style={[
-                  styles.placeDot,
-                  { backgroundColor: Colors.success }
-                ]}>
-                <Icon name="circle" size={12} color={Colors.onAccent} />
-              </View>
-              <Text style={styles.pickupName} numberOfLines={1}>
-                From: {pickup.name}
-              </Text>
-              <Text style={styles.pickupChange}>Change</Text>
-            </PressableScale>
-          ) : null}
-
-          {pickerMode === 'pickup' ? (
-            <FlatList
-              data={LANDMARKS}
-              keyExtractor={l => l.id}
-              style={styles.sheetList}
-              renderItem={({ item }) => (
-                <PressableScale
-                  style={styles.placeRow}
-                  onPress={() => pickLandmark(item.id)}
-                  haptic>
-                  <View
-                    style={[
-                      styles.placeDot,
-                      { backgroundColor: Colors.success }
-                    ]}>
-                    <Icon name="circle" size={12} color={Colors.onAccent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.placeName}>{item.name}</Text>
-                    <Text style={styles.placeAddr}>{item.address}</Text>
-                  </View>
-                  {item.id === pickup.id ? (
-                    <Icon
-                      name="check-circle"
-                      size={20}
-                      color={Colors.success}
-                    />
-                  ) : null}
-                </PressableScale>
-              )}
-            />
-          ) : (
-            <FlatList
-              data={LANDMARKS}
-              keyExtractor={l => l.id}
-              style={styles.sheetList}
-              renderItem={({ item }) => (
-                <PressableScale
-                  style={styles.placeRow}
-                  onPress={() => pickLandmark(item.id)}
-                  haptic>
-                  <View
-                    style={[
-                      styles.placeDot,
-                      { backgroundColor: Colors.destination }
-                    ]}>
-                    <Icon
-                      name="map-marker"
-                      size={14}
-                      color={Colors.onAccent}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.placeName}>{item.name}</Text>
-                    <Text style={styles.placeAddr}>{item.address}</Text>
-                  </View>
-                  {item.id === destination.id ? (
-                    <Icon
-                      name="check-circle"
-                      size={20}
-                      color={Colors.destination}
-                    />
-                  ) : null}
-                </PressableScale>
-              )}
-            />
-          )}
-        </View>
-      </Sheet>
-
       {/* ── Promos sheet ───────────────────────────────────────── */}
       <Sheet visible={promosOpen} onClose={() => setPromosOpen(false)}>
         <View style={styles.sheetContent}>
@@ -573,17 +464,22 @@ export default function PassengerHomeScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: Colors.background
+    backgroundColor: Colors.card
   },
   scrollContent: {
     paddingBottom: spacing.xl
   },
   header: {
+    overflow: 'hidden',
     paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.xl,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
+    paddingBottom: spacing.huge + spacing.md,
     gap: spacing.md
+  },
+  headerWave: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0
   },
   headerTop: {
     flexDirection: 'row',
@@ -694,6 +590,39 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodySemibold,
     fontSize: FontSize.body,
     color: Colors.primaryText
+  },
+  rebookRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: Colors.accentGlass,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm
+  },
+  rebookRowIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  rebookRowWrap: {
+    flex: 1,
+    gap: 1
+  },
+  rebookRowLabel: {
+    fontFamily: FontFamily.button,
+    fontSize: FontSize.caption,
+    color: Colors.onAccent,
+    letterSpacing: LetterSpacing.wide,
+    textTransform: 'uppercase'
+  },
+  rebookRowRoute: {
+    fontFamily: FontFamily.bodySemibold,
+    fontSize: FontSize.small,
+    color: Colors.onAccentSoft
   },
   body: {
     paddingHorizontal: spacing.xxl,
@@ -814,35 +743,6 @@ const styles = StyleSheet.create({
     color: Colors.primaryText,
     marginBottom: spacing.md
   },
-  sheetList: {
-    maxHeight: 360
-  },
-  pickupRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: Colors.muted,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm
-  },
-  pickupName: {
-    flex: 1,
-    fontFamily: FontFamily.bodySemibold,
-    fontSize: FontSize.body,
-    color: Colors.primaryText
-  },
-  pickupChange: {
-    fontFamily: FontFamily.button,
-    fontSize: FontSize.caption,
-    color: Colors.brand
-  },
-  placeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md
-  },
   placeDot: {
     width: 34,
     height: 34,
@@ -854,12 +754,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodySemibold,
     fontSize: FontSize.body,
     color: Colors.primaryText
-  },
-  placeAddr: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.caption,
-    color: Colors.secondaryText,
-    marginTop: 1
   },
   promoDetailRow: {
     flexDirection: 'row',
@@ -895,29 +789,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    marginBottom: spacing.md
-  },
-  sheetTitleNoMargin: {
-    marginBottom: 0
-  },
-  mapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.brandSoft,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
-  },
-  mapButtonText: {
-    fontFamily: FontFamily.button,
-    fontSize: FontSize.small,
-    color: Colors.brand
   }
 });

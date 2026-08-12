@@ -3,7 +3,7 @@
 export type Role = 'passenger' | 'driver';
 export type VehicleType = 'tricycle' | 'jeepney';
 export type RideMode = 'special' | 'shared';
-export type RideStatus = 'idle' | 'finding' | 'assigned' | 'active' | 'complete';
+export type RideStatus = 'idle' | 'finding' | 'no-drivers' | 'assigned' | 'active' | 'complete';
 
 export interface LatLng {
   latitude: number;

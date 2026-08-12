@@ -3,12 +3,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Stagger } from '@/components/ui/fade-in-view';
 import { Icon, type IconName } from '@/components/ui/icon';
+import { PressableScale } from '@/components/ui/pressable-scale';
 import { Screen } from '@/components/ui/screen';
 import { Colors } from '@/constants/colors';
 import { radius, spacing } from '@/constants/spacing';
 import { shadows } from '@/constants/shadows';
 import { FontFamily, FontSize, LetterSpacing } from '@/constants/typography';
 import { useSession } from '@/context/session';
+import { useRebook } from '@/hooks/use-rebook';
 import type { TripReceipt } from '@/types';
 import { formatPeso } from '@/utils/fare';
 
@@ -19,6 +21,7 @@ const VEHICLE_ICON: Record<'tricycle' | 'jeepney', IconName> = {
 
 export default function HistoryScreen() {
   const { state } = useSession();
+  const rebook = useRebook();
 
   return (
     <Screen>
@@ -39,7 +42,7 @@ export default function HistoryScreen() {
       ) : (
         <Stagger interval={80}>
           {state.receipts.map((receipt) => (
-            <ReceiptCard key={receipt.id} receipt={receipt} />
+            <ReceiptCard key={receipt.id} receipt={receipt} onBook={() => void rebook(receipt)} />
           ))}
         </Stagger>
       )}
@@ -47,7 +50,7 @@ export default function HistoryScreen() {
   );
 }
 
-function ReceiptCard({ receipt }: { receipt: TripReceipt }) {
+function ReceiptCard({ receipt, onBook }: { receipt: TripReceipt; onBook: () => void }) {
   const date = new Date(receipt.date);
   return (
     <View style={styles.card}>
@@ -86,6 +89,14 @@ function ReceiptCard({ receipt }: { receipt: TripReceipt }) {
             />
           ))}
         </View>
+        <PressableScale
+          accessibilityRole="button"
+          style={styles.rebookBtn}
+          onPress={onBook}
+          haptic>
+          <Icon name="map-marker-path" size={14} color={Colors.brand} />
+          <Text style={styles.rebookText}>Book again</Text>
+        </PressableScale>
       </View>
     </View>
   );
@@ -162,6 +173,9 @@ const styles = StyleSheet.create({
     color: Colors.success,
   },
   cardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     paddingTop: spacing.md,
@@ -169,5 +183,20 @@ const styles = StyleSheet.create({
   stars: {
     flexDirection: 'row',
     gap: 2,
+  },
+  rebookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: Colors.muted,
+  },
+  rebookText: {
+    fontFamily: FontFamily.button,
+    fontSize: FontSize.caption,
+    color: Colors.brand,
+    letterSpacing: LetterSpacing.wide,
   },
 });

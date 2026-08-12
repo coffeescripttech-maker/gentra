@@ -6,8 +6,16 @@ import { Colors } from '@/constants/colors';
 import { FontFamily, FontSize } from '@/constants/typography';
 
 function tabIcon(name: IconName) {
-  return function TabBarIcon({ color, size }: { color: ColorValue; size: number }) {
-    return <Icon name={name} size={size} color={String(color)} strokeWidth={2} />;
+  return function TabBarIcon({
+    color,
+    size
+  }: {
+    color: ColorValue;
+    size: number;
+  }) {
+    return (
+      <Icon name={name} size={size} color={String(color)} strokeWidth={2} />
+    );
   };
 }
 
@@ -29,17 +37,29 @@ export default function PassengerTabsLayout() {
           shadowOffset: { width: 0, height: -3 },
           shadowOpacity: 0.06,
           shadowRadius: 12,
-          elevation: 8,
+          elevation: 8
         },
         tabBarLabelStyle: {
           fontFamily: FontFamily.button,
-          fontSize: FontSize.caption,
-        },
+          fontSize: FontSize.caption
+        }
       }}>
-      <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: tabIcon('home') }} />
-      <Tabs.Screen name="history" options={{ title: 'Orders', tabBarIcon: tabIcon('receipt') }} />
-      <Tabs.Screen name="wallet" options={{ title: 'Wallet', tabBarIcon: tabIcon('wallet') }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('account-circle') }} />
+      <Tabs.Screen
+        name="home"
+        options={{ title: 'Home', tabBarIcon: tabIcon('home') }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{ title: 'Orders', tabBarIcon: tabIcon('banknote-arrow-up') }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{ title: 'Wallet', tabBarIcon: tabIcon('wallet') }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{ title: 'Profile', tabBarIcon: tabIcon('account-circle') }}
+      />
     </Tabs>
   );
 }

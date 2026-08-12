@@ -115,6 +115,8 @@ interface RideContextValue {
     rideMode: RideMode,
   ) => void;
   cancelBooking: () => void;
+  /** Re-run the same search after a "no drivers" miss. */
+  retryFinding: () => void;
   /** Passenger boards once the driver arrived (assigned → active). */
   boardVehicle: () => void;
   /** Passenger finishes the ride (active → complete). */
@@ -179,8 +181,8 @@ export function RideProvider({ children }: { children: ReactNode }) {
         setStatus('assigned');
         setProgress(0);
       } else {
-        setBooking(null);
-        setStatus('idle');
+        // Hold the trip so the passenger can re-search with one tap.
+        setStatus('no-drivers');
       }
     }, searchDelayMs);
     return () => clearTimeout(id);
@@ -221,6 +223,12 @@ export function RideProvider({ children }: { children: ReactNode }) {
     setBooking(null);
     setStatus('idle');
     setProgress(0);
+  }, []);
+
+  const retryFinding = useCallback(() => {
+    setStatus('finding');
+    setProgress(0);
+    setIncomingRequest(null);
   }, []);
 
   const boardVehicle = useCallback(() => {
@@ -319,6 +327,7 @@ export function RideProvider({ children }: { children: ReactNode }) {
       setDraftDestination,
       startBooking,
       cancelBooking,
+      retryFinding,
       boardVehicle,
       finishPassengerRide,
       resetRide,
@@ -341,6 +350,7 @@ export function RideProvider({ children }: { children: ReactNode }) {
       draftDestination,
       startBooking,
       cancelBooking,
+      retryFinding,
       boardVehicle,
       finishPassengerRide,
       resetRide,

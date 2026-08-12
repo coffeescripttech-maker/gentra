@@ -1,7 +1,14 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -9,30 +16,41 @@ import Animated, {
   withRepeat,
   withSequence,
   withSpring,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MapboxMap, type MapboxMapHandle, type MapboxMarker } from '@/components/mapbox-map';
+import {
+  MapboxMap,
+  type MapboxMapHandle,
+  type MapboxMarker
+} from '@/components/mapbox-map';
 import { BackButton } from '@/components/ui/back-button';
 import { Icon } from '@/components/ui/icon';
 import { PressableScale } from '@/components/ui/pressable-scale';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Colors } from '@/constants/colors';
-import { radius, spacing } from '@/constants/spacing';
 import { shadows } from '@/constants/shadows';
-import { FontFamily, FontSize, LineHeight, LetterSpacing } from '@/constants/typography';
+import { radius, spacing } from '@/constants/spacing';
+import {
+  FontFamily,
+  FontSize,
+  LetterSpacing,
+  LineHeight
+} from '@/constants/typography';
 import { useRide } from '@/context/ride';
 import {
   customPlaceId,
   getLandmark,
   LANDMARKS,
-  nearestLandmark,
   NAGA_CENTER,
-  placeToParams,
+  nearestLandmark,
+  placeFromParams,
+  placeToParams
 } from '@/data/locations';
 import type { Landmark, LatLng } from '@/types';
+import { estimateFare, formatPeso } from '@/utils/fare';
 import { tripDistanceKm } from '@/utils/geo';
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
@@ -57,12 +75,12 @@ function CenterPin({ bounce }: { bounce: number }) {
   useEffect(() => {
     scale.value = withSequence(
       withTiming(0.82, { duration: 110, easing: Easing.out(Easing.quad) }),
-      withSpring(1, { damping: 7, stiffness: 320 }),
+      withSpring(1, { damping: 7, stiffness: 320 })
     );
     ripple.value = withSequence(
       withTiming(0, { duration: 0 }),
       withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) }),
-      withTiming(0, { duration: 420, easing: Easing.in(Easing.quad) }),
+      withTiming(0, { duration: 420, easing: Easing.in(Easing.quad) })
     );
   }, [bounce, scale, ripple]);
 
@@ -71,7 +89,7 @@ function CenterPin({ bounce }: { bounce: number }) {
     breath.value = withRepeat(
       withTiming(1, { duration: 1700, easing: Easing.out(Easing.quad) }),
       -1,
-      false,
+      false
     );
   }, [breath]);
 
@@ -79,15 +97,15 @@ function CenterPin({ bounce }: { bounce: number }) {
     // The wrapper is centered, so the icon's middle sits on the map center.
     // Lucide's pin tip is ~21px below the icon's center at size 46 — lift it
     // up so the tip (not the body) marks the exact selection point.
-    transform: [{ translateY: -21 }, { scale: scale.value }],
+    transform: [{ translateY: -21 }, { scale: scale.value }]
   }));
   const breathStyle = useAnimatedStyle(() => ({
     opacity: (1 - breath.value) * 0.45,
-    transform: [{ scale: 1 + breath.value * 1.6 }],
+    transform: [{ scale: 1 + breath.value * 1.6 }]
   }));
   const rippleStyle = useAnimatedStyle(() => ({
     opacity: (1 - ripple.value) * 0.7,
-    transform: [{ scale: 0.85 + ripple.value * 1.9 }],
+    transform: [{ scale: 0.85 + ripple.value * 1.9 }]
   }));
 
   return (
@@ -109,17 +127,57 @@ function CenterPin({ bounce }: { bounce: number }) {
 export default function MapPickerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ pickupId?: string; destinationId?: string }>();
+  const params = useLocalSearchParams<{
+    pickupId?: string;
+    pickupLat?: string;
+    pickupLng?: string;
+    pickupName?: string;
+    pickupAddr?: string;
+    destinationId?: string;
+    destinationLat?: string;
+    destinationLng?: string;
+    destinationName?: string;
+    destinationAddr?: string;
+    select?: string;
+    route?: string;
+    mode?: string;
+  }>();
   const { draftPickup, setDraftPickup, setDraftDestination } = useRide();
+
+  /** Single-spot mode: confirm one location and return to the caller (the
+   * Where To? screen) instead of advancing to the next map step. */
+  const selectMode = Array.isArray(params.select)
+    ? params.select[0]
+    : params.select;
+
+  /** Route-review mode: both ends arrive via params, render the trip as-is. */
+  const routeMode = Array.isArray(params.route)
+    ? params.route[0] === '1'
+    : params.route === '1';
+  const seededPickup = routeMode ? placeFromParams(params, 'pickup') : null;
+  const seededDestination = routeMode
+    ? placeFromParams(params, 'destination')
+    : null;
+  const rideModeParam = Array.isArray(params.mode)
+    ? params.mode[0]
+    : params.mode;
 
   const mapRef = useRef<MapboxMapHandle>(null);
   const geocodeSeq = useRef(0);
   const aliveRef = useRef(true);
 
   // ── Flow state ────────────────────────────────────────────────────
-  const [mode, setMode] = useState<MapMode>('pickup');
-  const [pickup, setPickup] = useState<Landmark | null>(null);
-  const [destination, setDestination] = useState<Landmark | null>(null);
+  const [mode, setMode] = useState<MapMode>(
+    routeMode
+      ? 'route'
+      : selectMode === 'destination'
+        ? 'destination'
+        : 'pickup'
+  );
+  const [pickup, setPickup] = useState<Landmark | null>(seededPickup);
+  const [destination, setDestination] = useState<Landmark | null>(
+    seededDestination
+  );
   /** The place currently under the center pin (not yet confirmed). */
   const [pinned, setPinned] = useState<Landmark | null>(null);
   const [addressLoading, setAddressLoading] = useState(true);
@@ -132,12 +190,18 @@ export default function MapPickerScreen() {
   const [query, setQuery] = useState('');
   const [centerTick, setCenterTick] = useState(0);
 
-  // Where the journey starts: the saved pickup, or the home default.
-  const pickupSeed = useMemo(
-    () => draftPickup ?? getLandmark(params.pickupId ?? 'plaza-rizal'),
-    [draftPickup, params.pickupId],
-  );
+  // Where the journey starts: the saved pickup, the seeded route pickup, or
+  // the home default.
+  const pickupSeed = useMemo(() => {
+    if (seededPickup) return seededPickup;
+    const id = Array.isArray(params.pickupId)
+      ? params.pickupId[0]
+      : params.pickupId;
+    return draftPickup ?? getLandmark(id ?? 'plaza-rizal');
+  }, [seededPickup, draftPickup, params.pickupId]);
   const initialCenter = useMemo(() => pickupSeed.latLng, [pickupSeed]);
+  /** The pickup to show/guard on — locally confirmed, or the seed in select mode. */
+  const shownPickup = pickup ?? (selectMode ? pickupSeed : null);
 
   useEffect(() => {
     return () => {
@@ -151,10 +215,11 @@ export default function MapPickerScreen() {
     try {
       if (!MAPBOX_TOKEN) throw new Error('no token');
       const res = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${coordinate.longitude},${coordinate.latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=en`,
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${coordinate.longitude},${coordinate.latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=en`
       );
       if (!res.ok) throw new Error('geocode failed');
-      const json: { features?: Array<{ place_name?: string }> } = await res.json();
+      const json: { features?: Array<{ place_name?: string }> } =
+        await res.json();
       if (seq !== geocodeSeq.current) return;
       const feature = json.features?.[0];
       if (!feature?.place_name) throw new Error('empty result');
@@ -164,7 +229,7 @@ export default function MapPickerScreen() {
         id: customPlaceId(coordinate),
         name: parts[0] ?? 'Selected location',
         address: parts.slice(1).join(', ') || 'Naga City',
-        latLng: coordinate,
+        latLng: coordinate
       });
     } catch {
       if (seq !== geocodeSeq.current || !aliveRef.current) return;
@@ -174,7 +239,7 @@ export default function MapPickerScreen() {
         id: customPlaceId(coordinate),
         name: `Near ${near.name}`,
         address: near.address,
-        latLng: coordinate,
+        latLng: coordinate
       });
     } finally {
       if (seq === geocodeSeq.current && aliveRef.current) {
@@ -186,10 +251,12 @@ export default function MapPickerScreen() {
   // Keep the address in sync as the user drags / taps / recenters the map.
   const handleCenterChange = useCallback(
     (center: LatLng) => {
-      setCenterTick((t) => t + 1);
+      // Route-review mode doesn't pick a place — no need to geocode on pan.
+      if (routeMode) return;
+      setCenterTick(t => t + 1);
       void reverseGeocode(center);
     },
-    [reverseGeocode],
+    [reverseGeocode, routeMode]
   );
 
   // Tap-to-select: jump the pin to the tapped spot (moveend re-geocodes).
@@ -198,7 +265,9 @@ export default function MapPickerScreen() {
   }, []);
 
   // Seed the pickup address immediately (also covers the map-fail case).
+  // Route-review mode arrives with both places already known — skip the dance.
   useEffect(() => {
+    if (routeMode) return;
     void reverseGeocode(initialCenter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -208,10 +277,13 @@ export default function MapPickerScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') throw new Error('permission denied');
       const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.Balanced
       });
       if (!aliveRef.current) return;
-      const coord: LatLng = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      const coord: LatLng = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude
+      };
       setMyLocation(coord);
       setLocationFailed(false);
       if (mode === 'pickup') mapRef.current?.setCenter(coord, PICK_ZOOM);
@@ -220,18 +292,25 @@ export default function MapPickerScreen() {
     }
   }, [mode]);
 
-  // Default pickup = the user's real GPS location.
+  // Default pickup = the user's real GPS location. Route-review mode already
+  // has both ends, so skip the permission prompt entirely.
   useEffect(() => {
+    if (routeMode) return;
     void loadMyLocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If GPS resolved before the map finished loading, apply the fix now.
+  // If GPS resolved before the map finished loading, apply the fix now. In
+  // route-review mode the route draw retries here — the mount's setRoute timer
+  // can fire before the fresh WebView finishes loading and no-op.
   const handleMapReady = useCallback(() => {
     if (mode === 'pickup' && myLocation) {
       mapRef.current?.setCenter(myLocation, PICK_ZOOM);
     }
-  }, [mode, myLocation]);
+    if (mode === 'route' && pickup && destination) {
+      mapRef.current?.setRoute([pickup.latLng, destination.latLng], true);
+    }
+  }, [mode, myLocation, pickup, destination]);
 
   const searchPlace = useCallback(async () => {
     Keyboard.dismiss();
@@ -243,22 +322,25 @@ export default function MapPickerScreen() {
         ? `&proximity=${myLocation.longitude},${myLocation.latitude}`
         : '';
       const res = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=3${proximity}`,
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=3${proximity}`
       );
       if (!res.ok) throw new Error('search failed');
-      const json: { features?: Array<{ center?: [number, number] }> } = await res.json();
+      const json: { features?: Array<{ center?: [number, number] }> } =
+        await res.json();
       const feature = json.features?.[0];
       if (feature?.center) {
         mapRef.current?.setCenter(
           { latitude: feature.center[1], longitude: feature.center[0] },
-          SEARCH_ZOOM,
+          SEARCH_ZOOM
         );
         return;
       }
       throw new Error('no result');
     } catch {
       // Offline fallback: match a known landmark by name so search stays alive.
-      const match = LANDMARKS.find((l) => l.name.toLowerCase().includes(q.toLowerCase()));
+      const match = LANDMARKS.find(l =>
+        l.name.toLowerCase().includes(q.toLowerCase())
+      );
       if (match) mapRef.current?.setCenter(match.latLng, SEARCH_ZOOM);
     }
   }, [query, myLocation]);
@@ -272,16 +354,28 @@ export default function MapPickerScreen() {
   const confirmPickup = useCallback(() => {
     if (!pinned) return;
     geocodeSeq.current++; // drop any stale in-flight geocode
+    if (selectMode) {
+      // Single-spot pick: hand the place back to the Where To? screen.
+      setDraftPickup(pinned);
+      router.back();
+      return;
+    }
     setPickup(pinned);
     setDraftPickup(pinned);
     setDestination(null);
     setPinned(null);
     setAddressLoading(false);
     setMode('destination');
-  }, [pinned, setDraftPickup]);
+  }, [pinned, selectMode, setDraftPickup, router]);
 
   const confirmDestination = useCallback(() => {
-    if (!pinned || !pickup) return;
+    if (!pinned || !shownPickup) return;
+    if (selectMode) {
+      // Single-spot pick: hand the place back to the Where To? screen.
+      setDraftDestination(pinned);
+      router.back();
+      return;
+    }
     setDestination(pinned);
     setCalculatingRoute(true);
     setTimeout(() => {
@@ -289,7 +383,7 @@ export default function MapPickerScreen() {
       setCalculatingRoute(false);
       setMode('route');
     }, ROUTE_CALC_MS);
-  }, [pinned, pickup]);
+  }, [pinned, shownPickup, selectMode, setDraftDestination, router]);
 
   const chooseRide = useCallback(() => {
     if (!pickup || !destination) return;
@@ -299,34 +393,57 @@ export default function MapPickerScreen() {
       params: {
         ...placeToParams('pickup', pickup),
         ...placeToParams('destination', destination),
-      },
+        ...(rideModeParam ? { mode: rideModeParam } : {})
+      }
     });
-  }, [pickup, destination, setDraftDestination, router]);
+  }, [pickup, destination, rideModeParam, setDraftDestination, router]);
 
   // ── Derived values ───────────────────────────────────────────────
   const distance = useMemo(
-    () => (pickup && destination ? tripDistanceKm(pickup.latLng, destination.latLng) : 0),
-    [pickup, destination],
+    () =>
+      pickup && destination
+        ? tripDistanceKm(pickup.latLng, destination.latLng)
+        : 0,
+    [pickup, destination]
   );
   const durationMin = Math.max(2, Math.round(distance / KM_PER_MIN));
+  // Fare peek on the route review — tricycle honors the preselected ride mode.
+  const tricycleFare = estimateFare(
+    'tricycle',
+    rideModeParam === 'shared' ? 'shared' : 'special',
+    distance
+  );
+  const jeepneyFare = estimateFare('jeepney', 'shared', distance);
 
   const markers = useMemo<MapboxMarker[]>(() => {
     if (mode === 'route' && pickup && destination) {
       return [
-        { id: 'pickup', coordinate: pickup.latLng, color: Colors.success, title: 'Pickup' },
+        {
+          id: 'pickup',
+          coordinate: pickup.latLng,
+          color: Colors.success,
+          title: 'Pickup'
+        },
         {
           id: 'destination',
           coordinate: destination.latLng,
           color: Colors.destination,
-          title: 'Destination',
-        },
+          title: 'Destination'
+        }
       ];
     }
-    if (mode === 'destination' && pickup) {
-      return [{ id: 'pickup', coordinate: pickup.latLng, color: Colors.success, title: 'Pickup' }];
+    if (mode === 'destination' && shownPickup) {
+      return [
+        {
+          id: 'pickup',
+          coordinate: shownPickup.latLng,
+          color: Colors.success,
+          title: 'Pickup'
+        }
+      ];
     }
     return [];
-  }, [mode, pickup, destination]);
+  }, [mode, pickup, destination, shownPickup]);
 
   // Entering route mode: draw the line and frame both pins.
   useEffect(() => {
@@ -345,7 +462,7 @@ export default function MapPickerScreen() {
       id: customPlaceId(initialCenter),
       name: `Near ${near.name}`,
       address: near.address,
-      latLng: initialCenter,
+      latLng: initialCenter
     };
   }, [pinned, mapFailed, initialCenter]);
 
@@ -374,7 +491,9 @@ export default function MapPickerScreen() {
     }
     return (
       <Text style={styles.placeName}>
-        {mode === 'pickup' ? 'Move the map to set your pickup' : 'Move the map to set your destination'}
+        {mode === 'pickup'
+          ? 'Move the map to set your pickup'
+          : 'Move the map to set your destination'}
       </Text>
     );
   };
@@ -383,7 +502,9 @@ export default function MapPickerScreen() {
     <View style={styles.root}>
       {mapFailed ? (
         <View style={styles.fallbackBg}>
-          <Text style={styles.fallbackHint}>Map couldn't load — try again in a moment.</Text>
+          <Text style={styles.fallbackHint}>
+            Map couldn't load — try again in a moment.
+          </Text>
         </View>
       ) : (
         <MapboxMap
@@ -399,7 +520,9 @@ export default function MapPickerScreen() {
         />
       )}
 
-      {mode !== 'route' && !mapFailed ? <CenterPin bounce={centerTick} /> : null}
+      {mode !== 'route' && !mapFailed ? (
+        <CenterPin bounce={centerTick} />
+      ) : null}
 
       {/* Top overlay: back + contextual search */}
       <View style={[styles.topBar, { top: insets.top + spacing.sm }]}>
@@ -412,7 +535,11 @@ export default function MapPickerScreen() {
               onChangeText={setQuery}
               onSubmitEditing={() => void searchPlace()}
               returnKeyType="search"
-              placeholder={mode === 'pickup' ? 'Search pickup location' : 'Search destination'}
+              placeholder={
+                mode === 'pickup'
+                  ? 'Search pickup location'
+                  : 'Search destination'
+              }
               placeholderTextColor={Colors.secondaryText}
               autoCorrect={false}
               autoCapitalize="none"
@@ -446,7 +573,8 @@ export default function MapPickerScreen() {
                 <View style={styles.errorRow}>
                   <Icon name="alert" size={16} color={Colors.warning} />
                   <Text style={styles.errorText}>
-                    We couldn't get your location — you can search or pick it on the map.
+                    We couldn't get your location — you can search or pick it on
+                    the map.
                   </Text>
                   <PressableScale
                     accessibilityRole="button"
@@ -459,7 +587,9 @@ export default function MapPickerScreen() {
               ) : !myLocation ? (
                 <View style={styles.locationHint}>
                   <ActivityIndicator size="small" color={Colors.brand} />
-                  <Text style={styles.locationHintText}>Finding your location…</Text>
+                  <Text style={styles.locationHintText}>
+                    Finding your location…
+                  </Text>
                 </View>
               ) : null}
 
@@ -483,17 +613,21 @@ export default function MapPickerScreen() {
             <>
               <Text style={styles.sheetKicker}>WHERE ARE YOU GOING?</Text>
 
-              {pickup ? (
+              {shownPickup ? (
                 <View style={styles.confirmedPickupRow}>
-                  <View style={[styles.placeDot, { backgroundColor: Colors.success }]}>
+                  <View
+                    style={[
+                      styles.placeDot,
+                      { backgroundColor: Colors.success }
+                    ]}>
                     <Icon name="circle" size={12} color={Colors.onAccent} />
                   </View>
                   <View style={styles.flex1}>
                     <Text style={styles.pickupName} numberOfLines={1}>
-                      {pickup.name}
+                      {shownPickup.name}
                     </Text>
                     <Text style={styles.placeAddr} numberOfLines={1}>
-                      {pickup.address}
+                      {shownPickup.address}
                     </Text>
                   </View>
                 </View>
@@ -501,7 +635,11 @@ export default function MapPickerScreen() {
 
               <View style={styles.addressRow}>
                 <View style={styles.addressIcon}>
-                  <Icon name="map-marker" size={20} color={Colors.destination} />
+                  <Icon
+                    name="map-marker"
+                    size={20}
+                    color={Colors.destination}
+                  />
                 </View>
                 <View style={styles.addressText}>{renderAddress()}</View>
               </View>
@@ -511,16 +649,20 @@ export default function MapPickerScreen() {
                 icon="map-marker-check"
                 gradient
                 onPress={confirmDestination}
-                disabled={addressLoading || !pinned || !pickup}
+                disabled={addressLoading || !pinned || !shownPickup}
                 style={styles.confirmBtn}
               />
             </>
           ) : (
             <>
-              <Text style={styles.sheetKicker}>YOUR TRIP</Text>
+              <Text style={styles.sheetKicker}>YOUR TRIPs</Text>
 
               <View style={styles.routeRow}>
-                <View style={[styles.placeDot, { backgroundColor: Colors.success }]}>
+                <View
+                  style={[
+                    styles.placeDot,
+                    { backgroundColor: Colors.success }
+                  ]}>
                   <Icon name="circle" size={12} color={Colors.onAccent} />
                 </View>
                 <View style={styles.flex1}>
@@ -534,7 +676,11 @@ export default function MapPickerScreen() {
               </View>
 
               <View style={styles.routeRow}>
-                <View style={[styles.placeDot, { backgroundColor: Colors.destination }]}>
+                <View
+                  style={[
+                    styles.placeDot,
+                    { backgroundColor: Colors.destination }
+                  ]}>
                   <Icon name="map-marker" size={14} color={Colors.onAccent} />
                 </View>
                 <View style={styles.flex1}>
@@ -551,12 +697,31 @@ export default function MapPickerScreen() {
 
               <View style={styles.statsRow}>
                 <View style={styles.stat}>
-                  <Icon name="map-marker-distance" size={16} color={Colors.brand} />
+                  <Icon
+                    name="map-marker-distance"
+                    size={16}
+                    color={Colors.brand}
+                  />
                   <Text style={styles.statText}>{distance.toFixed(1)} km</Text>
                 </View>
                 <View style={styles.stat}>
                   <Icon name="clock-outline" size={16} color={Colors.brand} />
                   <Text style={styles.statText}>~{durationMin} min</Text>
+                </View>
+              </View>
+
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Icon name="motorbike" size={16} color={Colors.success} />
+                  <Text style={styles.statText}>
+                    {formatPeso(tricycleFare.total)} tricycle
+                  </Text>
+                </View>
+                <View style={styles.stat}>
+                  <Icon name="bus" size={16} color={Colors.driver} />
+                  <Text style={styles.statText}>
+                    {formatPeso(jeepneyFare.total)} jeepney
+                  </Text>
                 </View>
               </View>
 
@@ -588,21 +753,21 @@ export default function MapPickerScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.card
   },
   fallbackBg: {
     flex: 1,
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xxl,
+    paddingHorizontal: spacing.xxl
   },
   fallbackHint: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.body,
     color: Colors.secondaryText,
     textAlign: 'center',
-    lineHeight: LineHeight.body,
+    lineHeight: LineHeight.body
   },
   topBar: {
     position: 'absolute',
@@ -610,7 +775,7 @@ const styles = StyleSheet.create({
     right: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.sm
   },
   searchWrap: {
     flex: 1,
@@ -621,14 +786,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    ...shadows.card,
+    ...shadows.card
   },
   searchInput: {
     flex: 1,
     fontFamily: FontFamily.body,
     fontSize: FontSize.body,
     color: Colors.primaryText,
-    paddingVertical: 0,
+    paddingVertical: 0
   },
   pinLayer: {
     position: 'absolute',
@@ -637,7 +802,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center'
   },
   pulse: {
     // Absolute children ignore flex alignment — pin this to the map center.
@@ -649,7 +814,7 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: `${Colors.pickup}2B`,
+    backgroundColor: `${Colors.pickup}2B`
   },
   ripple: {
     position: 'absolute',
@@ -662,13 +827,13 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2,
     borderColor: Colors.pickup,
-    backgroundColor: 'rgba(32, 138, 239, 0.08)',
+    backgroundColor: 'rgba(32, 138, 239, 0.08)'
   },
   bottomArea: {
     position: 'absolute',
     left: spacing.md,
     right: spacing.md,
-    gap: spacing.md,
+    gap: spacing.md
   },
   myLoc: {
     alignSelf: 'flex-end',
@@ -680,14 +845,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
+    ...shadows.card
   },
   sheetCard: {
     backgroundColor: Colors.card,
     borderRadius: radius.lg,
     padding: spacing.lg,
     gap: spacing.sm,
-    ...shadows.modal,
+    ...shadows.modal
   },
   sheetHandle: {
     alignSelf: 'center',
@@ -695,13 +860,13 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.border,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.xs
   },
   sheetKicker: {
     fontFamily: FontFamily.button,
     fontSize: FontSize.caption,
     color: Colors.secondaryText,
-    letterSpacing: LetterSpacing.wide,
+    letterSpacing: LetterSpacing.wide
   },
   locationHint: {
     flexDirection: 'row',
@@ -710,12 +875,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.brandSoft,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm
   },
   locationHintText: {
     fontFamily: FontFamily.bodySemibold,
     fontSize: FontSize.small,
-    color: Colors.brand,
+    color: Colors.brand
   },
   errorRow: {
     flexDirection: 'row',
@@ -723,30 +888,30 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: Colors.warningSoft,
     borderRadius: radius.md,
-    padding: spacing.md,
+    padding: spacing.md
   },
   errorText: {
     flex: 1,
     fontFamily: FontFamily.body,
     fontSize: FontSize.caption,
     color: Colors.primaryText,
-    lineHeight: LineHeight.caption,
+    lineHeight: LineHeight.caption
   },
   retryBtn: {
     paddingVertical: 6,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.pill,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.card
   },
   retryText: {
     fontFamily: FontFamily.button,
     fontSize: FontSize.caption,
-    color: Colors.brand,
+    color: Colors.brand
   },
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.md
   },
   addressIcon: {
     width: 44,
@@ -754,11 +919,11 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: Colors.brandSoft,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center'
   },
   addressText: {
     flex: 1,
-    gap: 4,
+    gap: 4
   },
   confirmedPickupRow: {
     flexDirection: 'row',
@@ -766,44 +931,44 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: Colors.muted,
     borderRadius: radius.md,
-    padding: spacing.sm,
+    padding: spacing.sm
   },
   placeDot: {
     width: 34,
     height: 34,
     borderRadius: 17,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center'
   },
   pickupName: {
     fontFamily: FontFamily.bodySemibold,
     fontSize: FontSize.body,
-    color: Colors.primaryText,
+    color: Colors.primaryText
   },
   placeName: {
     fontFamily: FontFamily.heading,
     fontSize: FontSize.subtitle,
-    color: Colors.primaryText,
+    color: Colors.primaryText
   },
   placeAddr: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.caption,
     color: Colors.secondaryText,
-    lineHeight: LineHeight.caption,
+    lineHeight: LineHeight.caption
   },
   routeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.md
   },
   divider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginVertical: spacing.xs,
+    marginVertical: spacing.xs
   },
   statsRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.md
   },
   stat: {
     flexDirection: 'row',
@@ -812,18 +977,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.brandSoft,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm
   },
   statText: {
     fontFamily: FontFamily.button,
     fontSize: FontSize.small,
-    color: Colors.brand,
+    color: Colors.brand
   },
   flex1: {
-    flex: 1,
+    flex: 1
   },
   confirmBtn: {
-    marginTop: spacing.xs,
+    marginTop: spacing.xs
   },
   calcOverlay: {
     position: 'absolute',
@@ -833,7 +998,7 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(248, 250, 252, 0.4)',
+    backgroundColor: 'rgba(248, 250, 252, 0.4)'
   },
   calcCard: {
     flexDirection: 'row',
@@ -843,11 +1008,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
-    ...shadows.elevated,
+    ...shadows.elevated
   },
   calcText: {
     fontFamily: FontFamily.bodySemibold,
     fontSize: FontSize.small,
-    color: Colors.primaryText,
-  },
+    color: Colors.primaryText
+  }
 });

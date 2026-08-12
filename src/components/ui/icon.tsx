@@ -1,10 +1,14 @@
 import type { LucideProps } from 'lucide-react-native';
 import {
   ArrowLeft,
+  ArrowUpDown,
   BadgeCheck,
+  Banknote,
+  BanknoteArrowUp,
   BanknoteX,
   Bell,
   Bike,
+  Briefcase,
   Bus,
   BusFront,
   Car,
@@ -12,6 +16,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Circle,
   CircleUser,
   ClipboardX,
@@ -31,6 +36,7 @@ import {
   Plus,
   Radar,
   Receipt,
+  RefreshCw,
   Route,
   Search,
   ShieldCheck,
@@ -68,7 +74,9 @@ const ICONS = {
   alert: TriangleAlert,
   'arrow-left': ArrowLeft,
   'bell-outline': Bell,
+  briefcase: Briefcase,
   bus: Bus,
+  cash: Banknote,
   'bus-clock': BusFront,
   'car-multiple': Car,
   'car-off': CarFront,
@@ -78,6 +86,7 @@ const ICONS = {
   'check-circle': CheckCircle2,
   'chevron-down': ChevronDown,
   'chevron-right': ChevronRight,
+  'chevron-up': ChevronUp,
   circle: Circle,
   'clipboard-remove-outline': ClipboardX,
   'clock-outline': Clock,
@@ -98,11 +107,13 @@ const ICONS = {
   plus: Plus,
   radar: Radar,
   receipt: Receipt,
+  refresh: RefreshCw,
   'shield-check': ShieldCheck,
   speedometer: Gauge,
   star: Star,
   'star-outline': Star,
   steering: Gauge,
+  'swap-vertical': ArrowUpDown,
   'tag-heart': Ticket,
   'tag-outline': Tag,
   wallet: Wallet,
@@ -110,7 +121,8 @@ const ICONS = {
   'wallet-plus': WalletCards,
   'weather-night': Moon,
   wifi: Wifi,
-  'wifi-off': WifiOff
+  'wifi-off': WifiOff,
+  'banknote-arrow-up': BanknoteArrowUp // Added for Orders tab
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

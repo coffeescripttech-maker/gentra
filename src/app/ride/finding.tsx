@@ -25,7 +25,7 @@ const TICK_MS = 1700;
 
 export default function RideFindingScreen() {
   const router = useRouter();
-  const { status, cancelBooking } = useRide();
+  const { status, cancelBooking, retryFinding } = useRide();
   const [tick, setTick] = useState(0);
 
   // Rotate microcopy + nudge a haptic tick each rotation.
@@ -44,7 +44,7 @@ export default function RideFindingScreen() {
     if (status === 'assigned') router.replace('/ride/assigned');
   }, [status, router]);
 
-  const searching = status === 'finding';
+const searching = status === 'finding';
 
   const goHome = () => {
     cancelBooking();
@@ -79,8 +79,22 @@ export default function RideFindingScreen() {
           <EmptyState
             icon="car-off"
             title="No drivers found"
-            body="We couldn't match you with a nearby driver. Please try again."
-            action={<PrimaryButton label="Back to home" onPress={goHome} />}
+            body="We couldn't match you with a nearby driver."
+            action={
+              <View style={styles.actions}>
+                <PrimaryButton
+                  label="Try again"
+                  icon="radar"
+                  gradient
+                  onPress={retryFinding}
+                />
+                <PrimaryButton
+                  label="Change trip"
+                  variant="secondary"
+                  onPress={goHome}
+                />
+              </View>
+            }
           />
         )}
       </View>
@@ -134,5 +148,10 @@ const styles = StyleSheet.create({
   skeletonLines: {
     flex: 1,
     gap: spacing.sm,
+  },
+  actions: {
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
 });
